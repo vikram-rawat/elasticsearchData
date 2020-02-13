@@ -1,0 +1,12 @@
+name: elasticsearch
+title: elasticsearch
+username:
+account: vikramsinghrawat
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 1792082
+bundleId: 2792130
+url: https://vikramsinghrawat.shinyapps.io/elasticsearch/
+when: 1581430518.807
+asMultiple: FALSE
+asStatic: FALSE
