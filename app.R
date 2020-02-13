@@ -5,7 +5,7 @@ library(magrittr)
 library(data.table)
 library(elasticsearchr)
 library(bs4Dash)
-library(bootstraplib)
+# library(bootstraplib)
 library(stringi)
 library(plotly)
 
@@ -14,16 +14,20 @@ library(plotly)
 setDTthreads(0L)
 
 elasticUrl <- "http://54.255.234.199:9200"
+# 
+# bs_theme_new()
+# 
+# bs_theme_add_variables(
+#   "body-bg" = "salmon",
+#   "body-color" = "white",
+#   "primary" = "#428bab",
+#   "secondary" = "lime"
+# )
 
-bs_theme_new()
 
-bs_theme_add_variables(
-  "body-bg" = "salmon",
-  "body-color" = "white",
-  "primary" = "#428bab",
-  "secondary" = "lime"
-)
+# source files ------------------------------------------------------------
 
+source(file = "modules/selectInputs.R")
 
 # ui ----------------------------------------------------------------------
 
@@ -39,11 +43,10 @@ ui <- bs4DashPage(
   controlbar = bs4DashControlbar(disable = TRUE),
   footer = bs4DashFooter(),
   body = bs4DashBody(
-    bootstrap(),
+    # bootstrap(),
     sidebarLayout(
       sidebarPanel = sidebarPanel(
-        uiOutput("selectCourse"),
-        uiOutput("selectSkills")
+        selectUI("selectValues") 
       ),
       mainPanel = mainPanel(
         fluidRow(
@@ -64,13 +67,20 @@ ui <- bs4DashPage(
 # server ------------------------------------------------------------------
 
 server <- function(input, output, session) {
+  
 
+# Top Data Store per Session ----------------------------------------------
+
+  mainStorage <- reactiveValues(elasticUrl = elasticUrl)
+
+  callModule(selectServer, "selectValues", mainStorage)
+  
 # job Query ---------------------------------------------------------------
 
   QueryParamJob <- reactive({
     
     validate(
-      need(input$keyskills, "choose a skill")
+      need(mainStorage$keyskill, "choose a skill")
     )
     
     queryBuild <- sprintf(
@@ -81,9 +91,9 @@ server <- function(input, output, session) {
               "fuzziness": "0"
               }
         }
-      }', input$keyskills
+      }', mainStorage$keyskill
     )
-    
+
     query(queryBuild)
     
   })
@@ -110,7 +120,7 @@ server <- function(input, output, session) {
           title = "Locations"
         ),
         yaxis = list(
-          title = paste0("Jobs Posting ", input$keyskills)
+          title = paste0("Jobs Posting ", mainStorage$keyskill)
         ),
         plot_bgcolor = "transparent",
         paper_bgcolor = "transparent"
@@ -122,7 +132,7 @@ server <- function(input, output, session) {
   
   output$jobData <- renderPlotly({
     
-    req(input$keyskills)
+    req(mainStorage$keyskill)
     
     MainDataJob()[order(salaryDetails.maximumSalary)] %>% 
       plot_ly(y = ~salaryDetails.maximumSalary,
@@ -165,7 +175,7 @@ server <- function(input, output, session) {
   })
   
   output$infoJobVacancies <- renderbs4InfoBox({
-    req(input$keyskills)
+    req(mainStorage$keyskill)
     
     bs4InfoBox(title = "Total Vacancies",
                value = countOfJobs(),
@@ -175,7 +185,7 @@ server <- function(input, output, session) {
   })  
   
   output$infoTopCorp <- renderbs4InfoBox({
-    req(input$keyskills)
+    req(mainStorage$keyskill)
     
     bs4InfoBox(title = "Top Corporate",
                value = MaxJobsCorporate(),
@@ -185,7 +195,7 @@ server <- function(input, output, session) {
   })
 
   output$infoMaxSalary <- renderbs4InfoBox({
-    req(input$keyskills)
+    req(mainStorage$keyskill)
     
     bs4InfoBox(title = "Top Salary",
                value = MaxSalary(),
@@ -199,7 +209,7 @@ server <- function(input, output, session) {
   QueryParamCourse <- reactive({
     
     validate(
-      need(input$keyskills, "choose a skill")
+      need(mainStorage$keyskills, "choose a skill")
     )
     
     queryBuild <- sprintf(
@@ -210,7 +220,7 @@ server <- function(input, output, session) {
               "fuzziness": "0"
             }
         }
-      }', input$keyskills
+      }', mainStorage$keyskill
     )
     
     query(queryBuild)
@@ -225,56 +235,10 @@ server <- function(input, output, session) {
   })
 
   output$courseData <- renderDataTable({
-    req(input$keyskills)
+    req(mainStorage$keyskill)
     MainDataCourse()
   })
 
-# select input ------------------------------------------------------------
-
-  SelectData <- reactive({
-    elastic(cluster_url = elasticUrl,
-            index = "platform",
-            doc_type = "") %search%
-      ( 
-        query(
-          '{
-                "match_all": {}
-              }'
-        ) +
-          select_fields(
-            '{
-                  "includes": [
-                        "skills",
-                        "title"
-                  ]
-                }'
-          )
-      ) %>% 
-      data.table()
-  })
-
-  output$selectCourse <- renderUI({
-    selectInput(
-      inputId = "courseTitle",
-      label = "Select the Course",
-      choices = SelectData()$title
-    )
-  })
-  
-  output$selectSkills <- renderUI({
-    
-    req(input$courseTitle)
-    
-    data <- SelectData()[title == input$courseTitle,]
-
-    selectInput(
-      inputId = "keyskills",
-      label = "Select the skills",
-      choices = data$skills %>%
-        unlist()
-    )
-  })
-  
 }
 
 # runApp ------------------------------------------------------------------
