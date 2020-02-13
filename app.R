@@ -14,7 +14,7 @@ library(plotly)
 setDTthreads(0L)
 
 elasticUrl <- "http://54.255.234.199:9200"
-# 
+
 # bs_theme_new()
 # 
 # bs_theme_add_variables(
@@ -24,10 +24,10 @@ elasticUrl <- "http://54.255.234.199:9200"
 #   "secondary" = "lime"
 # )
 
-
 # source files ------------------------------------------------------------
 
 source(file = "modules/selectInputs.R")
+source(file = "modules/JobData.R")
 
 # ui ----------------------------------------------------------------------
 
@@ -55,10 +55,7 @@ ui <- bs4DashPage(
           bs4InfoBoxOutput("infoMaxSalary")
         ),
         fluidRow(
-          plotlyOutput("jobData",
-                       width = "100%"),
-          plotlyOutput("locations",
-                       width = "100%")
+          jobUI("jobPlot")
         )
       ))
   )
@@ -75,83 +72,7 @@ server <- function(input, output, session) {
 
   callModule(selectServer, "selectValues", mainStorage)
   
-# job Query ---------------------------------------------------------------
-
-  QueryParamJob <- reactive({
-    
-    validate(
-      need(mainStorage$keyskill, "choose a skill")
-    )
-    
-    queryBuild <- sprintf(
-      '{
-        "match" : {
-              "keySkills.other.label" : {
-              "query": "%s",
-              "fuzziness": "0"
-              }
-        }
-      }', mainStorage$keyskill
-    )
-
-    query(queryBuild)
-    
-  })
-  
-  MainDataJob <- reactive({
-    elastic(cluster_url = elasticUrl,
-            index = "jobid",
-            doc_type = "") %search%
-      QueryParamJob() %>% 
-      data.table()
-  })
-  
-  output$locations <- renderPlotly({
-    MainDataJob()[, .(locations = 
-                lapply(locations, function(x){
-                  x$label
-                }) %>% 
-                unlist()
-    )] %>% 
-      plot_ly(x = ~locations) %>% 
-      add_histogram() %>% 
-      layout(
-        xaxis = list(
-          title = "Locations"
-        ),
-        yaxis = list(
-          title = paste0("Jobs Posting ", mainStorage$keyskill)
-        ),
-        plot_bgcolor = "transparent",
-        paper_bgcolor = "transparent"
-      ) %>% 
-      config(
-        displayModeBar = FALSE
-      )
-  })
-  
-  output$jobData <- renderPlotly({
-    
-    req(mainStorage$keyskill)
-    
-    MainDataJob()[order(salaryDetails.maximumSalary)] %>% 
-      plot_ly(y = ~salaryDetails.maximumSalary,
-              x = ~companyDetails.name) %>% 
-      add_bars() %>% 
-      layout(
-        xaxis = list(
-          title = "Company Names"
-        ),
-        yaxis = list(
-          title = "maximum Salary"
-        ),
-        plot_bgcolor = "transparent",
-        paper_bgcolor = "transparent"
-      ) %>% 
-      config(
-        displayModeBar = FALSE
-      )
-  })
+  MainDataJob <- callModule(jobServer, "jobPlot", mainStorage)
   
   countOfJobs <- reactive({
     MainDataJob()[,sum(vacancy)]
@@ -241,5 +162,5 @@ server <- function(input, output, session) {
 
 }
 
-# runApp ------------------------------------------------------------------
+# run App -----------------------------------------------------------------
 shinyApp(ui, server)
